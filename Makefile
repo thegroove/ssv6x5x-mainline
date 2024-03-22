@@ -1,70 +1,15 @@
-PLATFORMS = ssv6x5x
+KMODULE_NAME = ssv6x5x
 
-KBUILD_TOP := $(PWD)
+ARCH ?= arm
+KSRC ?= $(HOME)/firmware/output/build/linux-custom
+CROSS_COMPILE ?= $(HOME)/firmware/output/per-package/linux/host/opt/ext-toolchain/bin/arm-linux-
 
+KBUILD_TOP ?= $(PWD)
+SSV_DRV_PATH ?= $(PWD)
 
-ifeq ($(KERNELRELEASE),)
+include $(KBUILD_TOP)/config.mak
 
-KVERS_UNAME ?= $(shell uname -r)
-KVERS_ARCH ?= $(shell arch)
-
-KBUILD ?= $(shell readlink -f /lib/modules/$(KVERS_UNAME)/build)
-
-ifeq (,$(KBUILD))
-$(error kernel build tree not found - set KBUILD to configured kernel)
-endif
-
-#KCONFIG := $(KBUILD)/config
-#ifeq (,$(wildcard $(KCONFIG)))
-#$(error No .config found in $(KBUILD), set KBUILD to configured kernel)
-#endif
-
-ifneq (,$(wildcard $(KBUILD)/include/linux/version.h))
-ifneq (,$(wildcard $(KBUILD)/include/generated/uapi/linux/version.h))
-$(error Multiple copied of version.h found, clean build tree)
-endif
-endif
-
-# Kernel Makefile doesn't always know the exact kernel version, so we
-# get it from the kernel headers instead and pass it to make.
-VERSION_H := $(KBUILD)/include/generated/utsrelease.h
-ifeq (,$(wildcard $(VERSION_H)))
-VERSION_H := $(KBUILD)/include/linux/utsrelease.h
-endif
-ifeq (,$(wildcard $(VERSION_H)))
-VERSION_H := $(KBUILD)/include/linux/version.h
-endif
-ifeq (,$(wildcard $(VERSION_H)))
-$(error Please run 'make modules_prepare' in $(KBUILD))
-endif
-
-KVERS := $(shell sed -ne 's/"//g;s/^\#define UTS_RELEASE //p' $(VERSION_H))
-
-ifeq (,$(KVERS))
-$(error Cannot find UTS_RELEASE in $(VERSION_H), please report)
-endif
-
-INST_DIR = /lib/modules/$(KVERS)/misc
-
-#include $(KCONFIG)
-
-endif
-
-#KBUILD_TOP := /mnt/nfsroot/weiguang.ruan/o-amlogic-mr1/hardware/wifi/icomm/drivers/ssv6xxx/ssv6x5x
-include $(KBUILD_TOP)/$(PLATFORMS).cfg
-include $(KBUILD_TOP)/platform-config.mak
-
-PWD := $(shell pwd)
-
-ifeq ($(findstring -DSSV_SUPPORT_HAL, $(ccflags-y)), -DSSV_SUPPORT_HAL)
-KMODULE_NAME=ssv6x5x
-else
-KMODULE_NAME=ssv6051
-endif
 EXTRA_CFLAGS := -I$(KBUILD_TOP) -I$(KBUILD_TOP)/include
-
-DEF_PARSER_H = $(KBUILD_TOP)/include/ssv_conf_parser.h
-$(shell env ccflags="$(ccflags-y)" $(KBUILD_TOP)/parser-conf.sh $(DEF_PARSER_H))
 
 KERN_SRCS := ssvdevice/ssvdevice.c
 KERN_SRCS += ssvdevice/ssv_cmd.c
@@ -134,27 +79,14 @@ $(KMODULE_NAME)-y += $(KERN_SRCS:.c=.o)
 
 obj-$(CONFIG_SSV6200_CORE) += $(KMODULE_NAME).o
 
-all: module
 
-module:
-	ARCH=arm $(MAKE) -C $(KBUILD) M=$(KBUILD_TOP)
+all: modules
 
-install:
-	install -p -m 644 $(KMODULE_NAME).ko $(KMODDESTDIR)
+modules:
+	$(MAKE) -C $(KSRC) M=$(SSV_DRV_PATH) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) modules
 
-uninstall:
-	rm -f $(KMODDESTDIR)/$(KMODULE_NAME).ko
-    
 strip:
-	cp platforms/$(PLATFORMS)-wifi.cfg image/$(KMODULE_NAME)-wifi.cfg
-	cp $(KMODULE_NAME).ko image/$(KMODULE_NAME).ko
-	cp platforms/cli image
-ifneq ($(SSV_STRIP),)
-	cp $(KMODULE_NAME).ko image/$(KMODULE_NAME)_ori.ko
-	$(SSV_STRIP) --strip-unneeded image/$(KMODULE_NAME).ko
-	#$(SSV_STRIP) --strip-debug image/$(KMODULE_NAME).ko
-endif
+	$(CROSS_COMPILE)strip $(KMODULE_NAME).ko --strip-unneeded
 
 clean:
-	ARCH=arm $(MAKE) -C $(KBUILD) M=$(KBUILD_TOP) clean
-
+	$(MAKE) -C $(KSRC) M=$(SSV_DRV_PATH) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) clean
